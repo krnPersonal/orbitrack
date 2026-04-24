@@ -1,0 +1,109 @@
+# =============================================================================
+# DEVELOPMENT BUILD
+# Branch:   main
+# Trigger:  Manual (workflow_dispatch)
+# Purpose:  Build SNAPSHOT JAR for development testing
+# Version:  Must be X.X.X-SNAPSHOT format
+# =============================================================================
+
+name: Development Build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  BUILD:
+    runs-on: ubuntu-latest
+
+    steps:
+      # -----------------------------------------------------------------------
+      # PRE-FLIGHT CHECKS
+      # -----------------------------------------------------------------------
+      - name: Validate running on main branch
+        run: |
+          echo "================================================="
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Triggered by: ${{ github.actor }}"
+          echo "================================================="
+          if [[ "${{ github.ref_name }}" != "main" ]]; then
+            echo "❌ ERROR: Development build must run on main branch only!"
+            echo "Current branch: ${{ github.ref_name }}"
+            exit 1
+          fi
+          echo "✅ Branch validation passed"
+
+      # -----------------------------------------------------------------------
+      # SETUP
+      # -----------------------------------------------------------------------
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v3
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      # -----------------------------------------------------------------------
+      # VERSION VALIDATION
+      # -----------------------------------------------------------------------
+      - name: Read and validate SNAPSHOT version
+        run: |
+          VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "================================================="
+          echo "Building version: $VERSION"
+          echo "================================================="
+
+          if [[ ! "$VERSION" == *"-SNAPSHOT" ]]; then
+            echo "❌ ERROR: main branch must always be a SNAPSHOT version!"
+            echo "Current version: $VERSION"
+            echo "Expected format: X.X.X-SNAPSHOT (e.g. 0.0.2-SNAPSHOT)"
+            exit 1
+          fi
+          echo "✅ Version validation passed: $VERSION"
+
+      # -----------------------------------------------------------------------
+      # BUILD
+      # -----------------------------------------------------------------------
+      - name: Build Application
+        run: mvn clean install --no-transfer-progress
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run Tests
+        run: mvn test --no-transfer-progress
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # -----------------------------------------------------------------------
+      # PUBLISH TO GITHUB PACKAGES
+      # -----------------------------------------------------------------------
+      - name: Publish SNAPSHOT to GitHub Packages
+        run: mvn deploy --no-transfer-progress -DskipTests
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # -----------------------------------------------------------------------
+      # ARTIFACT
+      # -----------------------------------------------------------------------
+      - name: Upload development JAR
+        uses: actions/upload-artifact@v3
+        with:
+          name: dev-snapshot-${{ env.VERSION }}-build-${{ github.run_number }}
+          path: target/*.jar
+          retention-days: 3
+
+      # -----------------------------------------------------------------------
+      # SUMMARY
+      # -----------------------------------------------------------------------
+      - name: Build Summary
+        run: |
+          echo "================================================="
+          echo "✅ Development Build Complete"
+          echo "Version:    ${{ env.VERSION }}"
+          echo "Branch:     ${{ github.ref_name }}"
+          echo "Build No:   ${{ github.run_number }}"
+          echo "Triggered:  ${{ github.actor }}"
+          echo "================================================="

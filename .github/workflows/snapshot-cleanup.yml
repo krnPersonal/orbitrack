@@ -1,0 +1,47 @@
+# =============================================================================
+# SNAPSHOT CLEANUP
+# Branch:   any (runs on schedule)
+# Trigger:  Scheduled (Mon-Fri 9am) + Manual
+# Purpose:  Delete old SNAPSHOT versions from GitHub Packages
+#           Keeps only non-SNAPSHOT (release) versions
+#           Prevents GitHub Packages storage from filling up
+# =============================================================================
+
+name: SNAPSHOT Cleanup
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 9 * * 1-5'    # Mon-Fri at 9:00am UTC
+
+jobs:
+  SNAPSHOT-CLEANUP:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Cleanup information
+        run: |
+          echo "================================================="
+          echo "SNAPSHOT Cleanup running"
+          echo "Time:        $(date)"
+          echo "Triggered:   ${{ github.event_name }}"
+          echo "Keeping:     All release versions (non-SNAPSHOT)"
+          echo "Deleting:    All SNAPSHOT versions"
+          echo "================================================="
+
+      - name: Delete all SNAPSHOT versions from GitHub Packages
+        uses: actions/delete-package-versions@v4
+        with:
+          package-name: "orbitrack"
+          package-type: "maven"
+          min-versions-to-keep: 0
+          ignore-versions: "^(?!.*-SNAPSHOT$).*$"   # keep everything that is NOT SNAPSHOT
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Cleanup Summary
+        run: |
+          echo "================================================="
+          echo "✅ SNAPSHOT Cleanup Complete"
+          echo "All SNAPSHOT versions removed from GitHub Packages"
+          echo "Release versions preserved"
+          echo "================================================="

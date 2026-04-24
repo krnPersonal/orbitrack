@@ -1,0 +1,255 @@
+# =============================================================================
+# HOTFIX RELEASE BUILD
+# Branch:   hotfix
+# Trigger:  Manual (workflow_dispatch) with hotfix version input
+# Purpose:  Build and release hotfix JAR on top of production release
+# Input:    releaseVersion (e.g. 0.0.1.0)
+# Version:  Must be X.X.X.X format, base must match master version
+# Flow:
+#   1. Validate hotfix branch and version format
+#   2. Validate version matches master base version
+#   3. Validate version not already released (no duplicate tags)
+#   4. Set pom.xml to hotfix version
+#   5. Build and publish JAR
+#   6. Tag hotfix release
+#   7. Create hotfix-X.X.X.X snapshot branch
+#   8. Merge hotfix into master
+#   9. Auto-sync master back into hotfix (ready for next fix)
+#  10. Sync fix to main (PR #2 must be done manually)
+# =============================================================================
+
+name: Hotfix Release Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      releaseVersion:
+        description: "Hotfix version (e.g. 0.0.1.0 — must match master base version)"
+        type: string
+        required: true
+
+jobs:
+  RELEASE:
+    runs-on: ubuntu-latest
+
+    steps:
+      # -----------------------------------------------------------------------
+      # PRE-FLIGHT CHECKS
+      # -----------------------------------------------------------------------
+      - name: Pre-flight information
+        run: |
+          echo "================================================="
+          echo "Branch:          ${{ github.ref_name }}"
+          echo "Hotfix version:  ${{ inputs.releaseVersion }}"
+          echo "Triggered by:    ${{ github.actor }}"
+          echo "================================================="
+
+      - name: Validate running on hotfix branch
+        run: |
+          if [[ "${{ github.ref_name }}" != "hotfix" ]]; then
+            echo "❌ ERROR: Hotfix build must run on hotfix branch only!"
+            echo "Current branch: ${{ github.ref_name }}"
+            echo "Please switch to hotfix branch and re-trigger."
+            exit 1
+          fi
+          echo "✅ Branch validation passed"
+
+      - name: Validate hotfix version format X.X.X.X
+        run: |
+          if [[ ! "${{ inputs.releaseVersion }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "❌ ERROR: Hotfix version must be X.X.X.X format!"
+            echo "Provided: ${{ inputs.releaseVersion }}"
+            echo "Expected: e.g. 0.0.1.0"
+            exit 1
+          fi
+          echo "✅ Hotfix version format valid: ${{ inputs.releaseVersion }}"
+
+      # -----------------------------------------------------------------------
+      # SETUP
+      # -----------------------------------------------------------------------
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v3
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Configure Git
+        run: |
+          git config --global user.email "khemneupane84@gmail.com"
+          git config --global user.name "Khem R Neupane"
+
+      # -----------------------------------------------------------------------
+      # VERSION VALIDATIONS
+      # -----------------------------------------------------------------------
+      - name: Validate hotfix base version matches master
+        run: |
+          # Get master version
+          git fetch origin
+          git checkout master
+          MASTER_VERSION=$(mvn help:evaluate \
+            -Dexpression=project.version -q -DforceStdout)
+          git checkout hotfix
+
+          # Extract base from hotfix input (first 3 digits)
+          HOTFIX_BASE=$(echo "${{ inputs.releaseVersion }}" | cut -d'.' -f1-3)
+
+          echo "================================================="
+          echo "Master version:  $MASTER_VERSION"
+          echo "Hotfix base:     $HOTFIX_BASE"
+          echo "Hotfix full:     ${{ inputs.releaseVersion }}"
+          echo "================================================="
+
+          if [[ "$HOTFIX_BASE" != "$MASTER_VERSION" ]]; then
+            echo "❌ ERROR: Hotfix base version does not match master!"
+            echo "Master is on:    $MASTER_VERSION"
+            echo "Hotfix must be:  $MASTER_VERSION.0 or $MASTER_VERSION.1 etc."
+            echo "You entered:     ${{ inputs.releaseVersion }}"
+            exit 1
+          fi
+          echo "✅ Hotfix base version matches master: $MASTER_VERSION"
+
+          echo "MASTER_VERSION=$MASTER_VERSION" >> $GITHUB_ENV
+
+      - name: Validate hotfix version not already released
+        run: |
+          git fetch --tags
+          if git tag | grep -q "^release-${{ inputs.releaseVersion }}$"; then
+            echo "❌ ERROR: Hotfix release-${{ inputs.releaseVersion }} already exists!"
+            echo ""
+            echo "Existing hotfix tags for ${{ env.MASTER_VERSION }}:"
+            git tag | grep "release-${{ env.MASTER_VERSION }}\." || echo "(none yet)"
+            echo ""
+            # Calculate what the next one should be
+            LAST=$(git tag | grep "release-${{ env.MASTER_VERSION }}\." | \
+              sort -t. -k4 -n | tail -1 | sed 's/release-//')
+            LAST_DIGIT=$(echo "$LAST" | cut -d'.' -f4)
+            NEXT_DIGIT=$((LAST_DIGIT + 1))
+            echo "Next available: ${{ env.MASTER_VERSION }}.$NEXT_DIGIT"
+            exit 1
+          fi
+          echo "✅ Hotfix version is available: ${{ inputs.releaseVersion }}"
+
+      - name: Show existing hotfix releases for reference
+        run: |
+          echo "Existing hotfix releases for base ${{ env.MASTER_VERSION }}:"
+          git tag | grep "release-${{ env.MASTER_VERSION }}\." || echo "(none — this is the first hotfix)"
+
+      # -----------------------------------------------------------------------
+      # SET HOTFIX VERSION
+      # -----------------------------------------------------------------------
+      - name: Set hotfix version in pom.xml
+        run: |
+          mvn versions:set \
+            -DnewVersion=${{ inputs.releaseVersion }} \
+            -DallowSnapshots=false \
+            versions:commit \
+            --no-transfer-progress
+          echo "✅ pom.xml updated to ${{ inputs.releaseVersion }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # -----------------------------------------------------------------------
+      # BUILD
+      # -----------------------------------------------------------------------
+      - name: Build Hotfix Application
+        run: mvn clean install --no-transfer-progress -DskipTests
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run Tests
+        run: mvn test --no-transfer-progress
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # -----------------------------------------------------------------------
+      # PUBLISH TO GITHUB PACKAGES
+      # -----------------------------------------------------------------------
+      - name: Publish hotfix to GitHub Packages
+        run: mvn deploy --no-transfer-progress -DskipTests
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # -----------------------------------------------------------------------
+      # UPLOAD ARTIFACT
+      # -----------------------------------------------------------------------
+      - name: Upload hotfix JAR
+        uses: actions/upload-artifact@v3
+        with:
+          name: hotfix-${{ inputs.releaseVersion }}
+          path: target/*.jar
+          retention-days: 90
+
+      # -----------------------------------------------------------------------
+      # GIT — COMMIT, TAG, CREATE SNAPSHOT BRANCH
+      # -----------------------------------------------------------------------
+      - name: Commit hotfix version to pom.xml
+        run: |
+          git commit -am "release: hotfix version ${{ inputs.releaseVersion }}"
+          echo "✅ Committed hotfix version ${{ inputs.releaseVersion }}"
+
+      - name: Create hotfix release tag
+        run: |
+          git tag -a release-${{ inputs.releaseVersion }} \
+            -m "Hotfix release ${{ inputs.releaseVersion }} - $(date +'%Y-%m-%d')"
+          echo "✅ Created tag: release-${{ inputs.releaseVersion }}"
+
+      - name: Create hotfix snapshot branch (hotfix-X.X.X.X)
+        run: |
+          git checkout -b hotfix-${{ inputs.releaseVersion }}
+          git push --tags origin hotfix-${{ inputs.releaseVersion }}
+          echo "✅ Created branch: hotfix-${{ inputs.releaseVersion }}"
+
+      # -----------------------------------------------------------------------
+      # MERGE HOTFIX INTO MASTER
+      # -----------------------------------------------------------------------
+      - name: Merge hotfix into master
+        run: |
+          git checkout master
+          git pull origin master
+          git merge hotfix --no-ff \
+            -m "release: merge hotfix ${{ inputs.releaseVersion }} into master"
+          git push origin master
+          echo "✅ master updated with hotfix ${{ inputs.releaseVersion }}"
+
+      # -----------------------------------------------------------------------
+      # AUTO SYNC MASTER BACK INTO HOTFIX
+      # -----------------------------------------------------------------------
+      - name: Auto-sync master back into hotfix (ready for next fix)
+        run: |
+          git checkout hotfix
+          git pull origin hotfix
+          git merge master --no-ff \
+            -m "chore: auto-sync master ${{ inputs.releaseVersion }} into hotfix"
+          git push origin hotfix
+          echo "✅ hotfix branch synced and ready for next fix"
+
+      # -----------------------------------------------------------------------
+      # SUMMARY
+      # -----------------------------------------------------------------------
+      - name: Hotfix Release Summary
+        run: |
+          echo "================================================="
+          echo "✅ Hotfix Release Build Complete"
+          echo ""
+          echo "Hotfix version:  ${{ inputs.releaseVersion }}"
+          echo "Base version:    ${{ env.MASTER_VERSION }}"
+          echo ""
+          echo "Branch created:"
+          echo "  hotfix-${{ inputs.releaseVersion }}  (hotfix snapshot)"
+          echo ""
+          echo "Tag created:"
+          echo "  release-${{ inputs.releaseVersion }}"
+          echo ""
+          echo "master branch:   updated ✅"
+          echo "hotfix branch:   synced and ready for next fix ✅"
+          echo ""
+          echo "⚠️  REMINDER: Open PR from fix/* → main (backport)"
+          echo "    to ensure main also gets this fix!"
+          echo "================================================="

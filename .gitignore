@@ -1,33 +1,65 @@
-HELP.md
+# =============================================
+# Maven
+# =============================================
 target/
-.mvn/wrapper/maven-wrapper.jar
-!**/src/main/**/target/
-!**/src/test/**/target/
+*.class
+*.jar
+*.war
+*.ear
+*.zip
+*.tar.gz
 
-### STS ###
-.apt_generated
-.classpath
-.factorypath
-.project
-.settings
-.springBeans
-.sts4-cache
-
-### IntelliJ IDEA ###
-.idea
-*.iws
+# =============================================
+# IDE — IntelliJ IDEA
+# =============================================
+.idea/
 *.iml
+*.iws
 *.ipr
+out/
 
-### NetBeans ###
-/nbproject/private/
-/nbbuild/
-/dist/
-/nbdist/
-/.nb-gradle/
-build/
-!**/src/main/**/build/
-!**/src/test/**/build/
+# =============================================
+# IDE — Eclipse
+# =============================================
+.eclipse/
+.settings/
+.project
+.classpath
 
-### VS Code ###
+# =============================================
+# IDE — VS Code
+# =============================================
 .vscode/
+
+# =============================================
+# Spring Boot
+# =============================================
+application-local.yml
+application-local.yaml
+
+# =============================================
+# Environment — NEVER commit secrets
+# =============================================
+.env
+*.env
+secrets.yml
+
+# =============================================
+# OS
+# =============================================
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# =============================================
+# Logs
+# =============================================
+*.log
+logs/
+
+# =============================================
+# Test output
+# =============================================
+test-output/
+surefire-reports/

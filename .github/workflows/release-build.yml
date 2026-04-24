@@ -1,0 +1,235 @@
+# =============================================================================
+# RELEASE BUILD
+# Branch:   main
+# Trigger:  Manual (workflow_dispatch) with version inputs
+# Purpose:  Build and release production JAR, create release branches and tags
+# Inputs:   releaseVersion (e.g. 0.0.1), devVersion (e.g. 0.0.2-SNAPSHOT)
+# Flow:
+#   1. Set pom.xml to releaseVersion
+#   2. Build and publish JAR
+#   3. Tag release
+#   4. Create master-X.X.X snapshot branch
+#   5. Create main-X.X.X-SNAPSHOT dev branch
+#   6. Bump pom.xml to devVersion on new dev branch
+#   7. Auto-sync master into hotfix branch
+# =============================================================================
+
+name: Release Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      releaseVersion:
+        description: "Release version (e.g. 0.0.1)"
+        type: string
+        required: true
+      devVersion:
+        description: "Next development version (e.g. 0.0.2-SNAPSHOT)"
+        type: string
+        required: true
+
+jobs:
+  RELEASE:
+    runs-on: ubuntu-latest
+
+    steps:
+      # -----------------------------------------------------------------------
+      # PRE-FLIGHT CHECKS
+      # -----------------------------------------------------------------------
+      - name: Pre-flight information
+        run: |
+          echo "================================================="
+          echo "Branch:          ${{ github.ref_name }}"
+          echo "Release version: ${{ inputs.releaseVersion }}"
+          echo "Dev version:     ${{ inputs.devVersion }}"
+          echo "Triggered by:    ${{ github.actor }}"
+          echo "================================================="
+
+      - name: Validate running on main branch
+        run: |
+          if [[ "${{ github.ref_name }}" != "main" ]]; then
+            echo "❌ ERROR: Release build must run on main branch only!"
+            echo "Current branch: ${{ github.ref_name }}"
+            exit 1
+          fi
+          echo "✅ Branch validation passed"
+
+      - name: Validate release version format X.X.X
+        run: |
+          if [[ ! "${{ inputs.releaseVersion }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "❌ ERROR: Release version must be X.X.X format!"
+            echo "Provided: ${{ inputs.releaseVersion }}"
+            echo "Expected: e.g. 0.0.1"
+            exit 1
+          fi
+          echo "✅ Release version format valid: ${{ inputs.releaseVersion }}"
+
+      - name: Validate dev version format X.X.X-SNAPSHOT
+        run: |
+          if [[ ! "${{ inputs.devVersion }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+-SNAPSHOT$ ]]; then
+            echo "❌ ERROR: Dev version must be X.X.X-SNAPSHOT format!"
+            echo "Provided: ${{ inputs.devVersion }}"
+            echo "Expected: e.g. 0.0.2-SNAPSHOT"
+            exit 1
+          fi
+          echo "✅ Dev version format valid: ${{ inputs.devVersion }}"
+
+      - name: Validate release tag does not already exist
+        run: |
+          git fetch --tags
+          if git tag | grep -q "^release-${{ inputs.releaseVersion }}$"; then
+            echo "❌ ERROR: Tag release-${{ inputs.releaseVersion }} already exists!"
+            echo "Please use a different version number."
+            exit 1
+          fi
+          echo "✅ Release tag is available: release-${{ inputs.releaseVersion }}"
+
+      # -----------------------------------------------------------------------
+      # SETUP
+      # -----------------------------------------------------------------------
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v3
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Configure Git
+        run: |
+          git config --global user.email "khemneupane84@gmail.com"
+          git config --global user.name "Khem R Neupane"
+
+      # -----------------------------------------------------------------------
+      # SET RELEASE VERSION
+      # -----------------------------------------------------------------------
+      - name: Set release version in pom.xml
+        run: |
+          mvn versions:set \
+            -DnewVersion=${{ inputs.releaseVersion }} \
+            -DallowSnapshots=false \
+            versions:commit \
+            --no-transfer-progress
+          echo "✅ pom.xml updated to ${{ inputs.releaseVersion }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # -----------------------------------------------------------------------
+      # BUILD
+      # -----------------------------------------------------------------------
+      - name: Build Release Application
+        run: mvn clean install --no-transfer-progress -DskipTests
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run Tests
+        run: mvn test --no-transfer-progress
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # -----------------------------------------------------------------------
+      # PUBLISH TO GITHUB PACKAGES
+      # -----------------------------------------------------------------------
+      - name: Publish release to GitHub Packages
+        run: mvn deploy --no-transfer-progress -DskipTests
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # -----------------------------------------------------------------------
+      # UPLOAD ARTIFACT
+      # -----------------------------------------------------------------------
+      - name: Upload release JAR
+        uses: actions/upload-artifact@v3
+        with:
+          name: release-${{ inputs.releaseVersion }}
+          path: target/*.jar
+          retention-days: 90
+
+      # -----------------------------------------------------------------------
+      # GIT — COMMIT, TAG, CREATE BRANCHES
+      # -----------------------------------------------------------------------
+      - name: Commit release version to pom.xml
+        run: |
+          git fetch origin
+          git commit -am "release: set version to ${{ inputs.releaseVersion }}"
+          echo "✅ Committed release version ${{ inputs.releaseVersion }}"
+
+      - name: Create release tag
+        run: |
+          git tag -a release-${{ inputs.releaseVersion }} \
+            -m "Release ${{ inputs.releaseVersion }} - $(date +'%Y-%m-%d')"
+          echo "✅ Created tag: release-${{ inputs.releaseVersion }}"
+
+      - name: Create master snapshot branch (master-X.X.X)
+        run: |
+          git checkout -b master-${{ inputs.releaseVersion }}
+          git push origin master-${{ inputs.releaseVersion }}
+          echo "✅ Created branch: master-${{ inputs.releaseVersion }}"
+
+      - name: Merge release into master
+        run: |
+          git checkout master
+          git pull origin master
+          git merge main --no-ff \
+            -m "release: merge ${{ inputs.releaseVersion }} into master"
+          git push origin master
+          echo "✅ master branch updated to ${{ inputs.releaseVersion }}"
+
+      - name: Create next dev branch and set SNAPSHOT version
+        run: |
+          git checkout main
+          git checkout -b main-${{ inputs.devVersion }}
+
+          mvn versions:set \
+            -DnewVersion=${{ inputs.devVersion }} \
+            versions:commit \
+            --no-transfer-progress
+
+          git commit -am "chore: bump version to ${{ inputs.devVersion }}"
+          git push origin main-${{ inputs.devVersion }}
+          echo "✅ Created dev branch: main-${{ inputs.devVersion }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push all tags
+        run: |
+          git push --tags origin
+          echo "✅ Tags pushed"
+
+      # -----------------------------------------------------------------------
+      # AUTO SYNC MASTER INTO HOTFIX
+      # -----------------------------------------------------------------------
+      - name: Auto-sync master into hotfix branch
+        run: |
+          git checkout hotfix
+          git pull origin hotfix
+          git merge master --no-ff \
+            -m "chore: auto-sync master ${{ inputs.releaseVersion }} into hotfix"
+          git push origin hotfix
+          echo "✅ hotfix branch synced with master ${{ inputs.releaseVersion }}"
+
+      # -----------------------------------------------------------------------
+      # SUMMARY
+      # -----------------------------------------------------------------------
+      - name: Release Summary
+        run: |
+          echo "================================================="
+          echo "✅ Release Build Complete"
+          echo ""
+          echo "Released version:  ${{ inputs.releaseVersion }}"
+          echo "Next dev version:  ${{ inputs.devVersion }}"
+          echo ""
+          echo "Branches created:"
+          echo "  master-${{ inputs.releaseVersion }}   (release snapshot)"
+          echo "  main-${{ inputs.devVersion }}         (next sprint dev)"
+          echo ""
+          echo "Tag created:"
+          echo "  release-${{ inputs.releaseVersion }}"
+          echo ""
+          echo "hotfix branch synced with master ✅"
+          echo "================================================="

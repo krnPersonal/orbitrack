@@ -1,0 +1,124 @@
+# =============================================================================
+# PR VALIDATION
+# Branch:   main, hotfix, master (all PRs)
+# Trigger:  Automatic on every Pull Request
+# Purpose:  Validate every PR before it can be merged
+#           - Runs tests
+#           - Validates version format per target branch
+#           - Ensures code quality
+# =============================================================================
+
+name: PR Validation
+
+on:
+  pull_request:
+    branches:
+      - main
+      - hotfix
+      - master
+
+jobs:
+  VALIDATE:
+    runs-on: ubuntu-latest
+
+    steps:
+      # -----------------------------------------------------------------------
+      # INFO
+      # -----------------------------------------------------------------------
+      - name: PR Information
+        run: |
+          echo "================================================="
+          echo "PR:           #${{ github.event.pull_request.number }}"
+          echo "Title:        ${{ github.event.pull_request.title }}"
+          echo "From branch:  ${{ github.head_ref }}"
+          echo "To branch:    ${{ github.base_ref }}"
+          echo "Author:       ${{ github.actor }}"
+          echo "================================================="
+
+      # -----------------------------------------------------------------------
+      # SETUP
+      # -----------------------------------------------------------------------
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v3
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      # -----------------------------------------------------------------------
+      # VERSION VALIDATION PER TARGET BRANCH
+      # -----------------------------------------------------------------------
+      - name: Read current version
+        run: |
+          VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Current pom.xml version: $VERSION"
+
+      - name: Validate version for PR → main (must be SNAPSHOT)
+        if: github.base_ref == 'main'
+        run: |
+          if [[ ! "${{ env.VERSION }}" == *"-SNAPSHOT" ]]; then
+            echo "❌ ERROR: PRs merging into main must have SNAPSHOT version!"
+            echo "Current version: ${{ env.VERSION }}"
+            echo "Expected format: X.X.X-SNAPSHOT"
+            exit 1
+          fi
+          echo "✅ Version valid for main: ${{ env.VERSION }}"
+
+      - name: Validate version for PR → hotfix (must be X.X.X.X)
+        if: github.base_ref == 'hotfix'
+        run: |
+          if [[ ! "${{ env.VERSION }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && \
+             [[ ! "${{ env.VERSION }}" == *"-SNAPSHOT" ]]; then
+            echo "⚠️  WARNING: PRs into hotfix should be fix branches"
+            echo "Current version: ${{ env.VERSION }}"
+          fi
+          echo "✅ Version check for hotfix PR passed: ${{ env.VERSION }}"
+
+      - name: Validate version for PR → master (must be X.X.X — no SNAPSHOT)
+        if: github.base_ref == 'master'
+        run: |
+          if [[ "${{ env.VERSION }}" == *"-SNAPSHOT"* ]]; then
+            echo "❌ ERROR: Cannot merge SNAPSHOT version into master!"
+            echo "Current version: ${{ env.VERSION }}"
+            echo "Only release versions (X.X.X or X.X.X.X) allowed on master"
+            exit 1
+          fi
+          echo "✅ Version valid for master: ${{ env.VERSION }}"
+
+      # -----------------------------------------------------------------------
+      # BUILD & TEST
+      # -----------------------------------------------------------------------
+      - name: Build Application
+        run: mvn clean install --no-transfer-progress
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run Tests
+        run: mvn test --no-transfer-progress
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # -----------------------------------------------------------------------
+      # PR RULES REMINDER
+      # -----------------------------------------------------------------------
+      - name: PR Rules Check
+        run: |
+          echo "================================================="
+          echo "✅ PR Validation Complete"
+          echo ""
+          echo "PR:          #${{ github.event.pull_request.number }}"
+          echo "Version:     ${{ env.VERSION }}"
+          echo "Target:      ${{ github.base_ref }}"
+          echo "Tests:       passed ✅"
+          echo ""
+          if [[ "${{ github.base_ref }}" == "master" ]]; then
+            echo "⚠️  REMINDER: master PR requires Tech Lead approval!"
+          fi
+          if [[ "${{ github.base_ref }}" == "hotfix" ]]; then
+            echo "⚠️  REMINDER: Remember to open a 2nd PR → main (backport)!"
+          fi
+          echo "================================================="
