@@ -175,7 +175,7 @@ jobs:
         run: |
           git checkout master
           git pull origin master
-          git merge main --no-ff \
+          git merge origin/main --no-ff \
             -m "release: merge ${{ inputs.releaseVersion }} into master"
           git push origin master
           echo "✅ master branch updated to ${{ inputs.releaseVersion }}"
@@ -206,12 +206,11 @@ jobs:
       # -----------------------------------------------------------------------
       - name: Auto-sync master into hotfix branch
         run: |
-          git checkout hotfix
-          git pull origin hotfix
-          git merge master --no-ff \
-            -m "chore: auto-sync master ${{ inputs.releaseVersion }} into hotfix"
-          git push origin hotfix
-          echo "✅ hotfix branch synced with master ${{ inputs.releaseVersion }}"
+          git checkout master
+          git pull origin master
+          git checkout -b hotfix/${{ inputs.releaseVersion }}
+          git push origin hotfix/${{ inputs.releaseVersion }}
+          echo "✅ created hotfix/${{ inputs.releaseVersion}} branch"
 
       # -----------------------------------------------------------------------
       # SUMMARY
@@ -231,5 +230,5 @@ jobs:
           echo "Tag created:"
           echo "  release-${{ inputs.releaseVersion }}"
           echo ""
-          echo "hotfix branch synced with master ✅"
+          echo "hotfix/${{ inputs.releaseVersion }} branch synced with master ✅"
           echo "================================================="

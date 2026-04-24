@@ -14,7 +14,7 @@ on:
   pull_request:
     branches:
       - main
-      - hotfix
+      - hotfix/**
       - master
 
 jobs:
@@ -69,7 +69,7 @@ jobs:
           echo "✅ Version valid for main: ${{ env.VERSION }}"
 
       - name: Validate version for PR → hotfix (must be X.X.X.X)
-        if: github.base_ref == 'hotfix'
+        if: startsWith(github.base_ref, 'hotfix/')
         run: |
           if [[ ! "${{ env.VERSION }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && \
              [[ ! "${{ env.VERSION }}" == *"-SNAPSHOT" ]]; then
@@ -118,7 +118,7 @@ jobs:
           if [[ "${{ github.base_ref }}" == "master" ]]; then
             echo "⚠️  REMINDER: master PR requires Tech Lead approval!"
           fi
-          if [[ "${{ github.base_ref }}" == "hotfix" ]]; then
+          if [[ "${{ github.base_ref }}" == hotfix/* ]]; then
             echo "⚠️  REMINDER: Remember to open a 2nd PR → main (backport)!"
           fi
           echo "================================================="

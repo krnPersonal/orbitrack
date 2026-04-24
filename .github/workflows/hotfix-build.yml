@@ -44,12 +44,12 @@ jobs:
           echo "Triggered by:    ${{ github.actor }}"
           echo "================================================="
 
-      - name: Validate running on hotfix branch
+      - name: Validate running on hotfix/x.x.x branch
         run: |
-          if [[ "${{ github.ref_name }}" != "hotfix" ]]; then
-            echo "❌ ERROR: Hotfix build must run on hotfix branch only!"
+          if [[ ! "${{ github.ref_name }}" =~ ^hotfix/[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "❌ ERROR: must run on hotfix/x.x.x branch only!"
             echo "Current branch: ${{ github.ref_name }}"
-            echo "Please switch to hotfix branch and re-trigger."
+            echo "Expected format: hotfix/0.0.1."
             exit 1
           fi
           echo "✅ Branch validation passed"
@@ -95,7 +95,7 @@ jobs:
           git checkout master
           MASTER_VERSION=$(mvn help:evaluate \
             -Dexpression=project.version -q -DforceStdout)
-          git checkout hotfix
+          git checkout ${{ github.ref_name}}
 
           # Extract base from hotfix input (first 3 digits)
           HOTFIX_BASE=$(echo "${{ inputs.releaseVersion }}" | cut -d'.' -f1-3)
@@ -200,7 +200,7 @@ jobs:
             -m "Hotfix release ${{ inputs.releaseVersion }} - $(date +'%Y-%m-%d')"
           echo "✅ Created tag: release-${{ inputs.releaseVersion }}"
 
-      - name: Create hotfix snapshot branch (hotfix-X.X.X.X)
+      - name: Create hotfix snapshot branch
         run: |
           git checkout -b hotfix-${{ inputs.releaseVersion }}
           git push --tags origin hotfix-${{ inputs.releaseVersion }}
@@ -213,7 +213,7 @@ jobs:
         run: |
           git checkout master
           git pull origin master
-          git merge hotfix --no-ff \
+          git merge ${{ github.ref_name }} --no-ff \
             -m "release: merge hotfix ${{ inputs.releaseVersion }} into master"
           git push origin master
           echo "✅ master updated with hotfix ${{ inputs.releaseVersion }}"
@@ -221,14 +221,14 @@ jobs:
       # -----------------------------------------------------------------------
       # AUTO SYNC MASTER BACK INTO HOTFIX
       # -----------------------------------------------------------------------
-      - name: Auto-sync master back into hotfix (ready for next fix)
+      - name: Auto-sync master back into hotfix/x.x.x
         run: |
-          git checkout hotfix
-          git pull origin hotfix
+          git checkout ${{ github.ref_name }}
+          git pull origin ${{ github.ref_name }}
           git merge master --no-ff \
-            -m "chore: auto-sync master ${{ inputs.releaseVersion }} into hotfix"
-          git push origin hotfix
-          echo "✅ hotfix branch synced and ready for next fix"
+            -m "auto-sync master ${{ inputs.releaseVersion }} into ${{ github.ref_name }}"
+          git push origin ${{ github.ref_name }}
+          echo "✅ ${{ github.ref_name }} and ready for next fix"
 
       # -----------------------------------------------------------------------
       # SUMMARY
@@ -242,7 +242,7 @@ jobs:
           echo "Base version:    ${{ env.MASTER_VERSION }}"
           echo ""
           echo "Branch created:"
-          echo "  hotfix-${{ inputs.releaseVersion }}  (hotfix snapshot)"
+          echo "  hotfix-${{ inputs.releaseVersion }}  (hotfix snapshot branch)"
           echo ""
           echo "Tag created:"
           echo "  release-${{ inputs.releaseVersion }}"
