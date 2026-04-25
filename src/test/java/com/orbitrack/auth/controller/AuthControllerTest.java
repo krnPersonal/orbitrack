@@ -1,11 +1,13 @@
 package com.orbitrack.auth.controller;
 
+import static org.mockito.BDDMockito.willThrow;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.orbitrack.auth.dto.RegisterResponse;
 import com.orbitrack.auth.service.AuthService;
+import com.orbitrack.common.exception.EmailAlreadyExistsException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
@@ -66,5 +68,24 @@ public class AuthControllerTest {
                 .andExpect(jsonPath("$.middleName").value("N"))
                 .andExpect(jsonPath("$.lastName").value("Doe"))
                 .andExpect(jsonPath("$.role").value("USER"));
+    }
+    @Test
+    public void shouldReturnBadRequestWhenEmailAlreadyExists() throws Exception {
+        willThrow(new EmailAlreadyExistsException("Email is already registered"))
+                .given(authService)
+                .register(any());
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "firstName": "Jone",
+                                  "middleName": "N",
+                                  "lastName": "Doe",
+                                  "email": "joneDoe@mail.com",
+                                  "password": "x!!!XXXX"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Email is already registered"));
     }
 }
