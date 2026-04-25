@@ -2,6 +2,7 @@ package com.orbitrack.auth.service;
 
 import com.orbitrack.auth.dto.RegisterRequest;
 import com.orbitrack.auth.dto.RegisterResponse;
+import com.orbitrack.common.exception.EmailAlreadyExistsException;
 import com.orbitrack.user.entity.User;
 import com.orbitrack.user.repository.UserRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -20,6 +21,10 @@ public class AuthService {
     }
 
     public RegisterResponse register(RegisterRequest request) {
+
+       if (userRepository.findByEmail(request.getEmail()).isPresent()) {
+           throw new EmailAlreadyExistsException("Email is already registered");
+       }
 
         User user = new User();
 
