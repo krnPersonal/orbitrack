@@ -1,0 +1,84 @@
+:root {
+    --accent: #6c5ce7;
+    --accent-lt: #eeedfe;
+    --accent-dk: #3c3489;
+    --success: #00b894;
+    --success-lt: #e1f5ee;
+    --success-dk: #085041;
+    --info: #0984e3;
+    --info-lt: #e6f1fb;
+    --info-dk: #0c447c;
+    --warn: #fdcb6e;
+    --warn-lt: #faeeda;
+    --warn-dk: #633806;
+    --danger: #d63031;
+    --danger-lt: #fcebeb;
+    --danger-dk: #791f1f;
+    --surface: #f8f9fa;
+    --card: #ffffff;
+    --border: #dee2e6;
+    --text: #2d3436;
+    --muted: #636e72;
+    --hint: #b2bec3;
+    --dark: #0f0f23;
+    --font-sans: "Inter", sans-serif;
+    --font-mono: "JetBrains Mono", monospace;
+
+    font-family: var(--font-sans), sans-serif;
+    color: var(--text);
+    background:var(--surface);
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+    margin: 0;
+    min-height: 100%;
+}
+body {
+    font-family: var(--font-sans), sans-serif;
+    background: var(--surface);
+    color: var(--text);
+}
+
+code {
+    font-family: var(--font-mono), monospace;
+}
+
+.app-shell {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    background: var(--surface);
+}
+
+.app-card {
+    width: min(640px, 100%);
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px;
+}
+.eyebrow {
+    margin: 0 0 8px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+}
+h1 {
+    margin: 0 0 12px;
+    font-size: 32px;
+    line-height: 1.1;
+}
+.body-copy {
+    margin: 0;
+    line-height: 1.6;
+    color: var(--muted);
+}
