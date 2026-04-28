@@ -1,15 +1,13 @@
 package com.orbitrack.user.entity;
 
-import jakarta.persistence.*;
-
-import java.time.LocalDateTime;
+import com.orbitrack.common.entity.BaseEntity;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Table;
 
 @Entity
 @Table(name = "users")
-public class User {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+public class User extends BaseEntity {
 
     @Column(nullable = false, unique = true, length = 255)
     private String email;
@@ -34,16 +32,6 @@ public class User {
 
     @Column(length = 150)
     private String title;
-
-    @Column(name = "created_at", nullable = false)
-    private LocalDateTime createdAt;
-
-    @Column(name = "updated_at", nullable = false)
-    private LocalDateTime updatedAt;
-
-    public Long getId() {
-        return id;
-    }
 
     public String getEmail() {
         return email;
@@ -77,14 +65,6 @@ public class User {
         return title;
     }
 
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public LocalDateTime getUpdatedAt() {
-        return updatedAt;
-    }
-
     public void setEmail(String email) {
         this.email = email;
     }
@@ -116,13 +96,4 @@ public class User {
     public void setTitle(String title) {
         this.title = title;
     }
-
-    public void setCreatedAt(LocalDateTime createdAt) {
-        this.createdAt = createdAt;
-    }
-
-    public void setUpdatedAt(LocalDateTime updatedAt) {
-        this.updatedAt = updatedAt;
-    }
-
 }

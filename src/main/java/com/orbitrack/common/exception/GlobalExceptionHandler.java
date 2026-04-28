@@ -9,9 +9,16 @@ import java.util.Map;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
     @ExceptionHandler(EmailAlreadyExistsException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Map<String, String> handleEmailAlreadyExistsException(EmailAlreadyExistsException ex) {
+        return Map.of("error", ex.getMessage());
+    }
+
+    @ExceptionHandler(InvalidCredentialsException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Map<String, String> handleInvalidCredentialsException(InvalidCredentialsException ex) {
         return Map.of("error", ex.getMessage());
     }
 }
