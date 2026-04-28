@@ -5,9 +5,12 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.orbitrack.auth.dto.LoginResponse;
 import com.orbitrack.auth.dto.RegisterResponse;
 import com.orbitrack.auth.service.AuthService;
+import com.orbitrack.auth.service.UserDetailsServiceImpl;
 import com.orbitrack.common.exception.EmailAlreadyExistsException;
+import com.orbitrack.common.exception.InvalidCredentialsException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
@@ -37,6 +40,8 @@ public class AuthControllerTest {
     private MockMvc mockMvc;
     @MockitoBean
     private AuthService authService;
+    @MockitoBean
+    private UserDetailsServiceImpl userDetailsService;
 
     @Test
     public void shouldRegisterUser() throws Exception {
@@ -57,7 +62,7 @@ public class AuthControllerTest {
                                   "firstName": "Jone",
                                   "middleName": "N",
                                   "lastName": "Doe",
-                                  "email": "oneDoe@mail.com",
+                                  "email": "joneDoe@mail.com",
                                   "password": "x!!!XXXX"
                                 }
                                 """))
@@ -87,5 +92,53 @@ public class AuthControllerTest {
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value("Email is already registered"));
+    }
+
+    @Test
+    public void shouldLoginUser() throws Exception {
+        LoginResponse loginResponse = new LoginResponse();
+        loginResponse.setId(1L);
+        loginResponse.setFirstName("Jone");
+        loginResponse.setMiddleName("N");
+        loginResponse.setLastName("Doe");
+        loginResponse.setEmail("joneDoe@email.com");
+        loginResponse.setRole("USER");
+        loginResponse.setToken("mock-jwt-token");
+
+        given(authService.login(any())).willReturn(loginResponse);
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "email": "joneDoe@email.com",
+                                  "password": "x!!!XXXX"
+                                 }
+                                """)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1))
+                .andExpect(jsonPath("$.email").value("joneDoe@email.com"))
+                .andExpect(jsonPath("$.firstName").value("Jone"))
+                .andExpect(jsonPath("$.middleName").value("N"))
+                .andExpect(jsonPath("$.lastName").value("Doe"))
+                .andExpect(jsonPath("$.role").value("USER"))
+                .andExpect(jsonPath("$.token").value("mock-jwt-token"));
+
+    }
+
+    @Test
+    public void shouldReturnBadRequestsWhenCredentialsAreInvalid() throws Exception {
+        willThrow(new InvalidCredentialsException("Invalid email or password"))
+                .given(authService).login(any());
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                 {
+                                   "email": "joneDoe@email.com",
+                                   "password": "wrongPassword"
+                                 }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Invalid email or password"));
     }
 }

@@ -1,5 +1,7 @@
 package com.orbitrack.auth.controller;
 
+import com.orbitrack.auth.dto.LoginRequest;
+import com.orbitrack.auth.dto.LoginResponse;
 import com.orbitrack.auth.dto.RegisterRequest;
 import com.orbitrack.auth.dto.RegisterResponse;
 import com.orbitrack.auth.service.AuthService;
@@ -20,6 +22,12 @@ public class AuthController {
     @ResponseStatus(HttpStatus.CREATED)
     public RegisterResponse register(@Valid @RequestBody RegisterRequest request) {
         return authService.register(request);
+    }
+
+    @PostMapping("/login")
+    @ResponseStatus(HttpStatus.OK)
+    public LoginResponse login(@Valid @RequestBody LoginRequest request) {
+        return authService.login(request);
     }
 
 }

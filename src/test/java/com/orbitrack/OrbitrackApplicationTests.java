@@ -1,6 +1,7 @@
 package com.orbitrack;
 
 import com.orbitrack.auth.service.AuthService;
+import com.orbitrack.auth.service.UserDetailsServiceImpl;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration;
@@ -21,6 +22,8 @@ class OrbitrackApplicationTests {
 
 	@MockitoBean
 	private AuthService authService;
+	@MockitoBean
+	private UserDetailsServiceImpl UserDetailsService;
 
 	@Test
 	void contextLoads() {
